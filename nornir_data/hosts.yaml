@@ -1,0 +1,17 @@
+---
+SPINE1:
+        hostname: 192.168.78.21
+        groups:
+          - cisco_ios_xe
+        data:
+          role: SPINE
+          site: BGIS
+
+LEAF1:
+        hostname: 192.168.78.22
+        groups:
+          - cisco_ios_xe
+        data:
+          role: LEAF
+          site: BGIS
+
