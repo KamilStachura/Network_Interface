@@ -10,10 +10,10 @@ from colorama import Fore
 
 class Network_Interface():
 
-    def __init__(self, site, role, commands):
+    def __init__(self, site, role, commands=None):
         self.site = site
         self.role = role
-        self.commands = commands
+        self.commands = "get_interfaces_counters"
         self.nr = InitNornir(config_file='/home/kamil/Network_Interface/nornir_data/config.yaml')
         self.date = date.today()
 
@@ -21,6 +21,22 @@ class Network_Interface():
         credentials = get_credentials.get_credentials()
         self.nr.inventory.defaults.username = credentials["username"]
         self.nr.inventory.defaults.password = credentials["password"]
+        self.mkdir_today()
+        
+        if self.site.lower() == "all" and self.role.lower() == "all":
+            result = self.nr.run(task=self.send_commands, commands=self.commands)
+        elif self.site.lower() == "all":
+            target = self.nr.filter(role=self.role)
+            result = target.run(task=self.send_commands, commands=self.commands)
+        elif self.role.lower() == "all":
+            target = self.nr.filter(site=self.site)
+            result = target.run(task=self.send_commands, commands=self.commands)
+        else:
+            target = self.nr.filter(site=self.site, role=self.role)
+            result = target.run(task=self.send_commands, commands=self.commands)
+        
+        print_result(result)
+
         compare = input("Would you like to compare the old interface errors with the new ones? (y/n) ")
         if compare.lower() == "y":
             old_date = input("Provide the date-folder of the old data (yyyy-mm-dd): ")
@@ -29,24 +45,6 @@ class Network_Interface():
             difference = self.compare_data(old_data, new_data)
             self.display_data(difference)
 
-        self.mkdir_today()
-        
-
-
-
-        # if self.site.lower() == "all" and self.role.lower() == "all":
-        #     result = self.nr.run(task=self.send_commands, commands=self.commands)
-        # elif self.site.lower() == "all":
-        #     target = self.nr.filter(role=self.role)
-        #     result = target.run(task=self.send_commands, commands=self.commands)
-        # elif self.role.lower() == "all":
-        #     target = self.nr.filter(site=self.site)
-        #     result = target.run(task=self.send_commands, commands=self.commands)
-        # else:
-        #     target = self.nr.filter(site=self.site, role=self.role)
-        #     result = target.run(task=self.send_commands, commands=self.commands)
-        
-        # print_result(result)
 
     def display_data(self, difference):
         for device in difference:
@@ -117,11 +115,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = 'Provide options to the Network Interface')
     parser.add_argument('-s', '--site', type=str, required=True, help='The targeted site to run the commands against')
     parser.add_argument('-r', '--role', type=str, required=True, help='The role of targeted devices (SPINE/LEAF/TRDSW/...)')
-    parser.add_argument('-c', '--commands', type=str, nargs='+', required=True, help='The commands to be run against the devices')
+    # parser.add_argument('-c', '--commands', type=str, nargs='+', required=True, help='The commands to be run against the devices')
 
     args=parser.parse_args()
 
-    Net_Int = Network_Interface(args.site, args.role, args.commands)
+    Net_Int = Network_Interface(args.site, args.role)
     Net_Int.main()
 
 
