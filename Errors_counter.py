@@ -78,7 +78,7 @@ class Network_Interface():
     def mkdir_today(self):
         try:
             os.makedirs(f"/home/kamil/Network_Interface/output/{self.date}")
-        except OSError as exc: # Python >2.5
+        except OSError:
             pass
 
 
