@@ -1,17 +1,41 @@
 ---
-# SPINE:
-#   data:
-#     device_type: spine
-# LEAF:
-#   data:
-#     device_type: leaf
-# VGIS:
-#   data:
-#     site: VGIS
 cisco_ios_xe:
+  platform: 'ios'
   connection_options:
     scrapli:
-      platform: 'cisco_iosxe'
+      port: 22
+      extras:
+        ssh_config_file: True
+        transport: ssh2
+        auth_strict_key: False
+        timeout_transport: 60
+
+cisco_ios_xr:
+  platform: 'iosxr'
+  connection_options:
+    scrapli:
+      port: 22
+      extras:
+        ssh_config_file: True
+        transport: ssh2
+        auth_strict_key: False
+        timeout_transport: 60
+
+cisco_nxos:
+  platform: 'nxos'
+  connection_options:
+    scrapli:
+      port: 22
+      extras:
+        ssh_config_file: True
+        transport: ssh2
+        auth_strict_key: False
+        timeout_transport: 60
+
+arista_eos:
+  platform: 'eos'
+  connection_options:
+    scrapli:
       port: 22
       extras:
         ssh_config_file: True
