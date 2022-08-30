@@ -1,4 +1,3 @@
-from nornir_utils.plugins.functions import print_result
 from nornir_scrapli.tasks import send_commands
 from nornir import InitNornir
 from nornir.core.filter import F
@@ -7,21 +6,45 @@ import getpass
 import argparse
 import os
 
+"""
+A network interface for executing ad-hoc show commands across groups of devices based on platform, role, site, their combination, or a list of devices.
+The ouput is saved in a site- & time-stamped folder.
+
+How to Use:
+1. Define your hosts file - This is your network devices' inventory
+2. Execute the script by providing the following arguments:
+    Requred arguments - site & role OR devices, commands, primary_user
+    Optional arguments - platform, backup_user, maintenance
+
+Example 1 - Execute "show run" & "show ver" against all LEAFs (role) in WARSAW (site)
+python Network_Interface.py
+
+"""
 
 class Network_Interface():
 
-    def __init__(self, site=None, role=None, devices=None, platform=None, commands=None, tacacs_user=None, local_user=None, maintenance=None):
+    def __init__(
+        self, 
+        site = None, 
+        role = None, 
+        devices = None, 
+        platform = None, 
+        commands = None, 
+        primary_user = None, 
+        backup_user = None, 
+        maintenance = None,
+        ):
+
         self.site = site
         self.role = role
         self.devices = devices
         self.platform = platform
         self.commands = commands
-        self.tacacs_user = tacacs_user
-        self.local_user = local_user
+        self.primary_user = primary_user
+        self.backup_user = backup_user
         self.maintenance = maintenance
         self.nr = InitNornir(
-            config_file='/home/kamil/Network_Interface/nornir_data/config.yaml')
-        self.date = datetime.now()
+            config_file='/home/kamil/Network_Interface/nornir_data/config.yaml', core={"raise_on_error": True})
         self.output_counter = 0
 
     def main(self):
@@ -29,21 +52,19 @@ class Network_Interface():
         if self.maintenance:
             self.nr = InitNornir(
                 config_file="/home/kamil/Network_interface/nornir_data/maint_config.yaml")
-        if self.local_user is None and self.tacacs_user is None:
-            print("Please provide a local or tacacs username when running the script")
-            print("For local username, use -lu parameter, like -lu 'your_local_username'")
-            print(
-                "For tacscs username, use -tu parameter, like -tu 'your_tacacs_username'")
-            exit()
-            # Gather user's login details to authenticate SSH connections
-        if self.local_user:
-            self.local_password = getpass.getpass(prompt="Local Password: ")
-        if self.tacacs_user:
-            self.tacacs_password = getpass.getpass(prompt="Tacacs Password: ")
-            self.nr.inventory.defaults.username = self.tacacs_user
-            self.nr.inventory.defaults.password = self.tacacs_password
 
-        # If no devices/site/role have been specified - Display error and exit
+        # Get primary/secondary credentials to authenticate the SSH connections
+        if self.primary_user:
+            self.primary_password = getpass.getpass(prompt="Primary Password: ")
+            self.nr.inventory.defaults.username = self.primary_user
+            self.nr.inventory.defaults.password = self.primary_password
+        if self.backup_user:
+            self.backup_password = getpass.getpass(prompt="Backup Password: ")
+        
+        timestamp = "{:%Y-%m-%d_%H-%M}".format(datetime.now())
+
+
+        # If no devices/site/role have been specified - display error and exit
         if self.devices is None and (self.site is None or self.role is None):
             print(
                 "Please specify the targeted devices or filter groups of devices by site and role")
@@ -63,7 +84,7 @@ class Network_Interface():
             self.role = self.role.upper()
 
             # Create a site- & time-stamped directory for the output
-            self.mkdir_now()
+            self.mkdir_now(timestamp=timestamp)
 
             # If platform argument is present, filter only for hosts running the desired platform
             if self.platform:
@@ -81,26 +102,25 @@ class Network_Interface():
             elif self.role != "ALL":
                 self.nr = self.nr.filter(role=self.role)
 
-        print(f"There are {len(self.nr.inventory.hosts)} targeted hosts.\n")
+        print(f"Number of Targeted Hosts: {len(self.nr.inventory.hosts)}.\n")
 
-        result = self.nr.run(task=self.execute_commands, creds_type="Tacacs")
-        if result.failed and self.local_user:
-            self.nr.inventory.defaults.username = self.local_user
-            self.nr.inventory.defaults.password = self.local_password
-            result = self.nr.run(task=self.execute_commands,
-                                 on_failed=True, on_good=False, creds_type="Local")
+        result = self.nr.run(task=self.execute_commands, timestamp=timestamp, creds_type="Primary")
+        if result.failed and self.backup_user:
+            self.nr.inventory.defaults.username = self.backup_user
+            self.nr.inventory.defaults.password = self.backup_password
+            result = self.nr.run(task=self.execute_commands, on_failed=True, on_good=False, 
+                                 timestamp=timestamp, creds_type="Backup")
 
         # Print what commands have been issued, and against how many devices.
-        print(f"Commands sent: {self.commands}")
-        print(f"The number of saved outputs: {self.output_counter}\n")
+        print(f"Commands Sent: {self.commands}\n")
+        print(f"The Number of Saved Files: {self.output_counter}\n")
 
-    # Make a directory for the output
-
-    def mkdir_now(self) -> "Directory":
-        location = f"output/{self.site}/{self.date.day}-{self.date.month}-{self.date.year}_{self.date.hour}-{self.date.minute}"
+    # Make a time- & site stamped directory for the output
+    def mkdir_now(self, timestamp):
+        location = f"output/{self.site}/{timestamp}"
         try:
             os.makedirs(location)
-            print(f"\nThe output will be saved in: {location}\n")
+            print(f"\nThe Output Will Be Saved in: {location}\n")
         except OSError as err:
             print("Encountered the following error when creating an output directory")
             print(err)
@@ -114,50 +134,48 @@ class Network_Interface():
             return False
 
     # Connect to the devices & send the commands. If the output is present, pass it to the save_output function
-    def execute_commands(self, task, creds_type):
+    def execute_commands(self, task, timestamp, creds_type):
         if self.is_host_alive(task):
             try:
                 result = task.run(task=send_commands,
                                   commands=list(self.commands))
                 if result.result:
-                    self.save_output(task, result=result.result)
+                    self.save_output(task, result=result.result, timestamp=timestamp)
             except Exception as err:
                 print(
-                    f"{task.host} Failed to Provide Output with {creds_type} Credentials\n")
+                    f"{task.host} Failed to Provide the Output with {creds_type} Credentials\n")
                 print(err)
         else:
             print(f"{task.host} Unreachable")
 
     # Safe the output in the site-stamped & time-stamped directory.
-    def save_output(self, task, result):
-        with open(f"output/{self.site}/{self.date.day}-{self.date.month}-{self.date.year}_{self.date.hour}-{self.date.minute}/{task.host}.txt", "w") as f:
+    def save_output(self, task, result, timestamp):
+        with open(f"output/{self.site}/{timestamp}/{task.host}.txt", "w") as f:
             f.write(result)
         self.output_counter += 1
 
 
 if __name__ == '__main__':
-    # Requred arguments - site & role OR devices, commands, tacacs_user or local_user
-    # Optional arguments - platform, maintenance
     parser = argparse.ArgumentParser(
-        description='Provide options to the Network Interface')
+        description='Provide arguments to the Network Interface')
     parser.add_argument('-s', '--site', type=str, required=False,
                         help='The targeted site to run the commands against')
     parser.add_argument('-r', '--role', type=str, required=False,
-                        help='The role of targeted devices (SPINE/LEAF/TRDSW/...)')
-    parser.add_argument('-d', '--devices', type=str, nargs='+' required=False, help='A single device, or a list of devices to be targeted')
+                        help='The role of the targeted devices (SPINE/LEAF/...)')
+    parser.add_argument('-d', '--devices', type=list, nargs='+', required=False, help='A single device, or a list of devices to be targeted')
     parser.add_argument('-p', '--platform', type=str, required=False,
                         help='The platform of the targeted devices (eos/iosxe/iosxr/nxos)')
     parser.add_argument('-c', '--commands', type=str, nargs='+',
                         required=True, help='The commands to be run against the devices')
-    parser.add_argument('-tu', '--tacacs_user', type=str,
-                        required=False, help='The tacacs username')
-    parser.add_argument('-lu', '--local_user', type=str,
-                        required=False, help='The local username')
+    parser.add_argument('-pu', '--primary_user', type=str,
+                        required=True, help='The primary username used to SSH into the targeted devices')
+    parser.add_argument('-bu', '--backup_user', type=str,
+                        required=False, help='The backup username, to be used if the primary fails')
     parser.add_argument('-m', '--maintenance', type=str, required=False,
-                        help='Whether this is for a specific maintenance (y). This will use the maintenance config/hosts instead')
+                        help='Whether this is for a maintenance (y). This will use the maintenance config/hosts instead')
 
     args = parser.parse_args()
 
     Net_Int = Network_Interface(
-        args.site, args.role, args.devices, args.commands, args.tacacs_user, args.local_user, args.maintenance)
+        args.site, args.role, args.devices, args.platform, args.commands, args.primary_user, args.backup_user, args.maintenance)
     Net_Int.main()

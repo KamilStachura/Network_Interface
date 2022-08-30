@@ -1,6 +1,5 @@
 ---
 cisco_ios_xe:
-  platform: 'ios'
   connection_options:
     scrapli:
       port: 22
@@ -11,7 +10,6 @@ cisco_ios_xe:
         timeout_transport: 60
 
 cisco_ios_xr:
-  platform: 'iosxr'
   connection_options:
     scrapli:
       port: 22
@@ -22,7 +20,6 @@ cisco_ios_xr:
         timeout_transport: 60
 
 cisco_nxos:
-  platform: 'nxos'
   connection_options:
     scrapli:
       port: 22
@@ -33,7 +30,6 @@ cisco_nxos:
         timeout_transport: 60
 
 arista_eos:
-  platform: 'eos'
   connection_options:
     scrapli:
       port: 22

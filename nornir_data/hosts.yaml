@@ -1,19 +1,19 @@
 ---
 SPINE1:
-        hostname: 192.168.78.21
-        platform: ios
-        groups:
+        hostname: SPINE1 # hostname or IP address. Has to be a hostname if you wish to filter on device names.
+        platform: ios # Used to define device's platform for connection purposes & filtering (ios, iosxr, nxos, eos).
+        groups: # Used to assign the connection options defined in the groups.yaml file.
           - cisco_ios_xe
-        data:
+        data: # role & site data used for the filtering purposes. Can be anything
           role: SPINE
-          site: BGIS
+          site: WARSAW
 
 LEAF1:
-        hostname: 192.168.78.22
+        hostname: LEAF1
         platform: ios
         groups:
           - cisco_ios_xe
         data:
           role: LEAF
-          site: BGIS
+          site: WARSAW
 

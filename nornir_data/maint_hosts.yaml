@@ -1,5 +1,5 @@
 ---
-# Theoritically, here would be a subset of hosts destined for a maintenance in case if only particular hosts from a site/role/platform combination are required.
+# Here would be a subset of hosts destined for a maintenance in case only particular hosts from a site/role/platform combination are required.
 SPINE1:
         hostname: 192.168.78.21
         platform: ios
