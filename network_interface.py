@@ -17,7 +17,14 @@ How to Use:
     Optional arguments - platform, backup_user, maintenance
 
 Example 1 - Execute "show run" & "show ver" against all LEAFs (role) in WARSAW (site)
-python Network_Interface.py
+$python network_interface.py -s WARSAW -r LEAF -c "show run" "show ver" -pu <username>
+
+Example 2 - Execute "show run" & "show ver" against all SPINEs (role) in all sites running Arista eos
+$python network_interface.py -s ALL -r SPINE -p eos -c "show run" "show ver" -pu <username>
+
+Example 3 - Execute "show run" & "show ver" against all devices in XYZ site running nxos
+with backup credentials in case some devices may not work with the primary credentials
+$python network_interface.py -s XYZ -r ALL -p nxos -c "show run" "show ver" -pu <primary_username> -bu <backup_username>
 
 """
 
@@ -48,6 +55,7 @@ class Network_Interface():
         self.output_counter = 0
 
     def main(self):
+        timestamp = "{:%Y-%m-%d_%H-%M}".format(datetime.now())
         # If maintenance argument is present, switch to maintenance config & hosts, instead of the regular ones.
         if self.maintenance:
             self.nr = InitNornir(
@@ -60,9 +68,6 @@ class Network_Interface():
             self.nr.inventory.defaults.password = self.primary_password
         if self.backup_user:
             self.backup_password = getpass.getpass(prompt="Backup Password: ")
-        
-        timestamp = "{:%Y-%m-%d_%H-%M}".format(datetime.now())
-
 
         # If no devices/site/role have been specified - display error and exit
         if self.devices is None and (self.site is None or self.role is None):
@@ -74,7 +79,7 @@ class Network_Interface():
         elif self.devices:
             # Create a site- & time-stamped directory for the output
             self.site = "ALL"
-            self.mkdir_now()
+            self.mkdir_now(timestamp=timestamp)
 
             self.devices = [device.upper() for device in self.devices]
             self.nr = self.nr.filter(F(hostname__any=self.devices))
@@ -154,7 +159,6 @@ class Network_Interface():
             f.write(result)
         self.output_counter += 1
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Provide arguments to the Network Interface')
@@ -162,7 +166,7 @@ if __name__ == '__main__':
                         help='The targeted site to run the commands against')
     parser.add_argument('-r', '--role', type=str, required=False,
                         help='The role of the targeted devices (SPINE/LEAF/...)')
-    parser.add_argument('-d', '--devices', type=list, nargs='+', required=False, help='A single device, or a list of devices to be targeted')
+    parser.add_argument('-d', '--devices', type=str, nargs='+', required=False, help='A single device, or a list of devices to be targeted')
     parser.add_argument('-p', '--platform', type=str, required=False,
                         help='The platform of the targeted devices (eos/iosxe/iosxr/nxos)')
     parser.add_argument('-c', '--commands', type=str, nargs='+',
@@ -179,3 +183,4 @@ if __name__ == '__main__':
     Net_Int = Network_Interface(
         args.site, args.role, args.devices, args.platform, args.commands, args.primary_user, args.backup_user, args.maintenance)
     Net_Int.main()
+
