@@ -2,6 +2,7 @@ from nornir_scrapli.tasks import send_commands
 from nornir import InitNornir
 from nornir.core.filter import F
 from datetime import datetime
+from pathlib import Path
 import getpass
 import argparse
 import os
@@ -50,26 +51,28 @@ class Network_Interface():
         self.primary_user = primary_user
         self.backup_user = backup_user
         self.maintenance = maintenance
-        self.nr = InitNornir(
-            config_file='/home/kamil/Network_Interface/nornir_data/config.yaml', core={"raise_on_error": True})
         self.output_counter = 0
 
     def main(self):
         timestamp = "{:%Y-%m-%d_%H-%M}".format(datetime.now())
-        # If maintenance argument is present, switch to maintenance config & hosts, instead of the regular ones.
-        if self.maintenance:
-            self.nr = InitNornir(
-                config_file="/home/kamil/Network_interface/nornir_data/maint_config.yaml")
+        # Initiate Nornir using the regular config
+        nr = InitNornir(
+            config_file=((Path(__file__).parent)/"nornir_data/config.yaml").resolve(), core={"raise_on_error": True})
 
-        # Get primary/secondary credentials to authenticate the SSH connections
+        # If maintenance argument is present, use the maintenance config & hosts.
+        if self.maintenance:
+            nr = InitNornir(
+                config_file=((Path(__file__).parent)/"nornir_data/maint_config.yaml").resolve(), core={"raise_on_error": True})
+
+        # Get the primary/secondary credentials to authenticate the SSH connections
         if self.primary_user:
             self.primary_password = getpass.getpass(prompt="Primary Password: ")
-            self.nr.inventory.defaults.username = self.primary_user
-            self.nr.inventory.defaults.password = self.primary_password
+            nr.inventory.defaults.username = self.primary_user
+            nr.inventory.defaults.password = self.primary_password
         if self.backup_user:
             self.backup_password = getpass.getpass(prompt="Backup Password: ")
 
-        # If no devices/site/role have been specified - display error and exit
+        # If devices/site/role haven't been specified - display error and exit
         if self.devices is None and (self.site is None or self.role is None):
             print(
                 "Please specify the targeted devices or filter groups of devices by site and role")
@@ -82,7 +85,7 @@ class Network_Interface():
             self.mkdir_now(timestamp=timestamp)
 
             self.devices = [device.upper() for device in self.devices]
-            self.nr = self.nr.filter(F(hostname__any=self.devices))
+            nr = nr.filter(F(hostname__any=self.devices))
 
         elif self.site and self.role:
             self.site = self.site.upper()
@@ -93,27 +96,27 @@ class Network_Interface():
 
             # If platform argument is present, filter only for hosts running the desired platform
             if self.platform:
-                self.nr = self.nr.filter(platform=self.platform.lower())
+                nr = nr.filter(platform=self.platform.lower())
 
             # If neither argument is "ALL", issue commands against all devices with the provided role & at the provided site
             if self.site != "ALL" and self.role != "ALL":
-                self.nr = self.nr.filter(site=self.site, role=self.role)
+                nr = nr.filter(site=self.site, role=self.role)
 
             # If the site argument is not "ALL", issue commands against all devices within the provided site
             elif self.site != "ALL":
-                self.nr = self.nr.filter(site=self.site)
+                nr = nr.filter(site=self.site)
 
             # If the role argument is not "ALL", issue commands against all devices of the provided role
             elif self.role != "ALL":
-                self.nr = self.nr.filter(role=self.role)
+                nr = nr.filter(role=self.role)
 
-        print(f"Number of Targeted Hosts: {len(self.nr.inventory.hosts)}.\n")
+        print(f"Number of Targeted Hosts: {len(nr.inventory.hosts)}.\n")
 
-        result = self.nr.run(task=self.execute_commands, timestamp=timestamp, creds_type="Primary")
+        result = nr.run(task=self.execute_commands, timestamp=timestamp, creds_type="Primary")
         if result.failed and self.backup_user:
-            self.nr.inventory.defaults.username = self.backup_user
-            self.nr.inventory.defaults.password = self.backup_password
-            result = self.nr.run(task=self.execute_commands, on_failed=True, on_good=False, 
+            nr.inventory.defaults.username = self.backup_user
+            nr.inventory.defaults.password = self.backup_password
+            result = nr.run(task=self.execute_commands, on_failed=True, on_good=False, 
                                  timestamp=timestamp, creds_type="Backup")
 
         # Print what commands have been issued, and against how many devices.
@@ -130,28 +133,17 @@ class Network_Interface():
             print("Encountered the following error when creating an output directory")
             print(err)
 
-    # Ping the host to check if it's reachable
-    def is_host_alive(self, task):
-        test = os.system(f"ping -c 3 {task.host} >/dev/null 2>&1")
-        if test == 0:
-            return True
-        else:
-            return False
-
     # Connect to the devices & send the commands. If the output is present, pass it to the save_output function
     def execute_commands(self, task, timestamp, creds_type):
-        if self.is_host_alive(task):
-            try:
-                result = task.run(task=send_commands,
-                                  commands=list(self.commands))
-                if result.result:
-                    self.save_output(task, result=result.result, timestamp=timestamp)
-            except Exception as err:
-                print(
-                    f"{task.host} Failed to Provide the Output with {creds_type} Credentials\n")
-                print(err)
-        else:
-            print(f"{task.host} Unreachable")
+        try:
+            result = task.run(task=send_commands,
+                                commands=list(self.commands))
+            if result.result:
+                self.save_output(task, result=result.result, timestamp=timestamp)
+        except Exception as err:
+            print(
+                f"{task.host} Failed to Provide the Output with {creds_type} Credentials\n")
+            print(err)
 
     # Safe the output in the site-stamped & time-stamped directory.
     def save_output(self, task, result, timestamp):
@@ -183,4 +175,3 @@ if __name__ == '__main__':
     Net_Int = Network_Interface(
         args.site, args.role, args.devices, args.platform, args.commands, args.primary_user, args.backup_user, args.maintenance)
     Net_Int.main()
-
